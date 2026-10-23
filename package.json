@@ -1,0 +1,56 @@
+{
+  "name": "dsh-doki",
+  "version": "1.0.0",
+  "private": false,
+  "type": "module",
+  "description": "Composer typing statistics: typing time, cumulative characters typed and thinking time, shown after the context meter in the same pill style as the session/Token stats.",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
+    }
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "cordis",
+    "plugin",
+    "typing",
+    "wpm",
+    "composer",
+    "stats"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HuskkyQ/dsh-doki.git"
+  },
+  "homepage": "https://github.com/HuskkyQ/dsh-doki#readme",
+  "bugs": {
+    "url": "https://github.com/HuskkyQ/dsh-doki/issues"
+  },
+  "license": "MIT",
+  "author": "HuskkyQ"
+}
