@@ -64,6 +64,16 @@ window.__ModuleLoader__.load({
         segUsageCache: '缓存命中',
         segMeterRing: '占用环',
         segMeterPercent: '百分比',
+        feedGroup: '小信息轮播',
+        feedNote: '在 Dock 里固定占一格，把零散但需要随时扫一眼的信息轮流放进来。点一下立刻切到下一条。',
+        feedTicker: '轮播格',
+        feedTickerDesc: '在 Dock 里占固定宽度的一格，每 4 秒换一条内容；没有可显示的内容时整格自动隐藏。',
+        feedTodos: '待办进度',
+        feedTodosDesc: '当前会话的待办完成情况（完成数 / 总数）。',
+        feedJobs: '后台任务',
+        feedJobsDesc: '当前会话正在运行的后台任务数量。',
+        feedTodo: '待办',
+        feedJob: '后台',
         reset: '恢复默认',
       },
       en: {
@@ -112,6 +122,16 @@ window.__ModuleLoader__.load({
         segUsageCache: 'Cache hit',
         segMeterRing: 'Ring',
         segMeterPercent: 'Percent',
+        feedGroup: 'Small info ticker',
+        feedNote: 'One fixed-width cell in the dock that rotates scattered, glanceable facts. Click to advance.',
+        feedTicker: 'Ticker cell',
+        feedTickerDesc: 'One fixed-width cell in the dock that swaps to the next fact every 4 seconds; the cell hides itself while it has nothing to show.',
+        feedTodos: 'Todo progress',
+        feedTodosDesc: 'Completed over total todos in this session.',
+        feedJobs: 'Background jobs',
+        feedJobsDesc: 'How many background jobs are running in this session.',
+        feedTodo: 'Todo',
+        feedJob: 'Jobs',
         reset: 'Reset',
       },
     };
@@ -154,6 +174,51 @@ window.__ModuleLoader__.load({
       }
       .doki-label { text-overflow: ellipsis; min-width: 0; overflow: hidden; }
       .doki-sep { color: var(--dsw-alias-separator-primary); margin: 0 6px; }
+      /* The rotating cell keeps a fixed footprint so the dock never reflows as
+         sources come and go; a new source costs zero extra width. */
+      .doki-feed {
+        order: 101;
+        min-width: 0;
+        display: inline-flex;
+        font-size: calc(var(--dsh-content-font-size-secondary, 13px) - 1px);
+        line-height: calc(20px + var(--dsh-content-font-delta-secondary, 0px));
+      }
+      .doki-feedPill {
+        box-sizing: border-box;
+        border-radius: var(--dsw-radius-sm);
+        width: 176px;
+        max-width: 100%;
+        color: var(--dsw-alias-label-tertiary);
+        font: inherit;
+        font-variant-numeric: tabular-nums;
+        line-height: inherit;
+        white-space: nowrap;
+        background: 0 0;
+        border: none;
+        align-items: center;
+        gap: 6px;
+        padding: 1px 8px;
+        display: inline-flex;
+        cursor: pointer;
+        overflow: hidden;
+      }
+      .doki-feedPill svg { flex: none; width: 14px; height: 14px; }
+      .doki-feedPill:hover {
+        background: var(--dsw-alias-interactive-bg-hover);
+        color: var(--dsw-alias-label-secondary);
+      }
+      .doki-feedText {
+        text-overflow: ellipsis;
+        min-width: 0;
+        overflow: hidden;
+        flex: 1 1 auto;
+      }
+      .doki-feedKey {
+        color: var(--dsw-alias-label-tertiary);
+        opacity: .75;
+        flex: none;
+      }
+      .doki-feedValue { color: var(--dsw-alias-label-secondary); }
       .doki-panel {
         z-index: 1100;
         box-sizing: border-box;
@@ -418,6 +483,10 @@ window.__ModuleLoader__.load({
     const MEASURE_STYLE = { visibility: 'hidden', left: 0, top: 0 };
     const PANEL_GAP = 8;
     const PANEL_MARGIN = 12;
+    // The rotating cell swaps sources on this beat. Four seconds is long
+    // enough to read one line and short enough that a glance at the dock
+    // catches the source the reader cares about within a few beats.
+    const FEED_INTERVAL_MS = 4000;
 
     // Invisible characters ride along in contenteditable text and are not
     // characters the user typed: zero-width marks, plus the private-use
@@ -526,6 +595,14 @@ window.__ModuleLoader__.load({
       meterPercent: true,
     };
 
+    // The rotating "small info" cell: one fixed-width seat in the dock that
+    // cycles through scattered facts (todo progress, running background jobs)
+    // instead of widening the row with each new source. Field names never
+    // collide with the three groups above, so the flat storage blob keeps
+    // working without a migration.
+    const FEED_FIELDS = ['ticker', 'todos', 'jobs'];
+    const DEFAULT_FEED = { ticker: true, todos: true, jobs: true };
+
     function normalizePrefs(value) {
       const out = { ...DEFAULT_PREFS };
       if (value === null || typeof value !== 'object') return { ...DEFAULT_PREFS };
@@ -562,14 +639,35 @@ window.__ModuleLoader__.load({
       return out;
     }
 
+    /** Feed sources default to on for the same reason the shipped ones do. */
+    function normalizeFeed(value) {
+      const out = { ...DEFAULT_FEED };
+      if (value === null || typeof value !== 'object') return out;
+      for (let i = 0; i < FEED_FIELDS.length; i += 1) {
+        const field = FEED_FIELDS[i];
+        out[field] = value[field] !== false;
+      }
+      return out;
+    }
+
     function readPrefs() {
-      const empty = { view: { ...DEFAULT_PREFS }, host: { ...DEFAULT_HOST }, seg: { ...DEFAULT_SEG } };
+      const empty = {
+        view: { ...DEFAULT_PREFS },
+        host: { ...DEFAULT_HOST },
+        seg: { ...DEFAULT_SEG },
+        feed: { ...DEFAULT_FEED },
+      };
       try {
         if (typeof localStorage === 'undefined' || localStorage === null) return empty;
         const raw = localStorage.getItem(PREFS_KEY);
         if (raw === null || raw === undefined) return empty;
         const parsed = JSON.parse(raw);
-        return { view: normalizePrefs(parsed), host: normalizeHost(parsed), seg: normalizeSeg(parsed) };
+        return {
+          view: normalizePrefs(parsed),
+          host: normalizeHost(parsed),
+          seg: normalizeSeg(parsed),
+          feed: normalizeFeed(parsed),
+        };
       } catch (error) {
         return empty;
       }
@@ -578,7 +676,10 @@ window.__ModuleLoader__.load({
     function writePrefs(next) {
       try {
         if (typeof localStorage === 'undefined' || localStorage === null) return;
-        localStorage.setItem(PREFS_KEY, JSON.stringify({ ...next.view, ...next.host, ...next.seg }));
+        localStorage.setItem(
+          PREFS_KEY,
+          JSON.stringify({ ...next.view, ...next.host, ...next.seg, ...next.feed })
+        );
       } catch (error) {
         /* private mode / quota: the in-memory value still drives this page */
       }
@@ -849,6 +950,7 @@ window.__ModuleLoader__.load({
         view: normalizePrefs(next),
         host: normalizeHost(next),
         seg: normalizeSeg(next),
+        feed: normalizeFeed(next),
       };
       prefsCache = value;
       writePrefs(value);
@@ -1287,6 +1389,225 @@ window.__ModuleLoader__.load({
       return h(React.Fragment, null, pill, panel);
     }
 
+    // ---- rotating info cell ------------------------------------------------
+    // A fixed-width cell that cycles through small ambient facts. The width is
+    // constant, so adding a source never reflows the dock; it only adds a slide.
+    const NO_JOBS = [];
+    let jobsCtx = null;
+    let jobsService = null;
+
+    // The client `jobs` service is read through `ctx.get`, never through
+    // `ctx.jobs`: a name in `inject` is an activation gate, and a service that
+    // is not ready would leave this entry pending forever (which fails boot).
+    //
+    // Resolution stays lazy: a slot renders long after `apply`, so a mount is
+    // the earliest moment the service is reliably present. Re-resolving per
+    // mount also means a service that appears late is still picked up.
+    function resolveJobs(ctx) {
+      try {
+        if (ctx === null || ctx === undefined || typeof ctx.get !== 'function') return null;
+        const service = ctx.get('jobs');
+        if (service === null || service === undefined) return null;
+        const model = service.state;
+        if (model === null || model === undefined) return null;
+        if (typeof model.getSnapshot !== 'function' || typeof model.subscribe !== 'function') return null;
+        jobsService = typeof service.watchRows === 'function' ? service : null;
+        return model;
+      } catch (error) {
+        console.warn('[doki] jobs service unavailable:', error);
+        return null;
+      }
+    }
+
+    function attachJobs(ctx) {
+      jobsCtx = ctx;
+      resolveJobs(ctx);
+    }
+
+    function readJobsRows(model, sessionId) {
+      try {
+        if (model === null || model === undefined) return NO_JOBS;
+        if (sessionId.length === 0) return NO_JOBS;
+        const snapshot = typeof model.getSnapshot === 'function' ? model.getSnapshot() : null;
+        if (snapshot === null || snapshot === undefined) return NO_JOBS;
+        const rows = snapshot.rows;
+        if (rows === null || typeof rows !== 'object') return NO_JOBS;
+        const list = rows[sessionId];
+        return Array.isArray(list) ? list : NO_JOBS;
+      } catch (error) {
+        return NO_JOBS;
+      }
+    }
+
+    function useJobsRows(sessionId) {
+      const [rows, setRows] = useState(NO_JOBS);
+      useEffect(() => {
+        // Resolution happens here rather than in `apply`: the service can
+        // register after this plugin activates, and a mount is the first
+        // moment it is reliably present.
+        const model = resolveJobs(jobsCtx);
+        if (model === null || model === undefined || typeof model.subscribe !== 'function') {
+          setRows(NO_JOBS);
+          return undefined;
+        }
+        const sync = () => setRows(readJobsRows(model, sessionId));
+        sync();
+        const release = model.subscribe(sync);
+        // Rows only arrive while the session is watched: the roster is fed by a
+        // `job.list` stream that `watchRows` opens and reference-counts, so
+        // subscribing alone would leave this slide permanently empty.
+        let unwatch = null;
+        try {
+          if (jobsService !== null && sessionId.length > 0) {
+            const stop = jobsService.watchRows(sessionId);
+            if (typeof stop === 'function') unwatch = stop;
+          }
+        } catch (error) {
+          console.warn('[doki] jobs watch failed:', error);
+        }
+        return () => {
+          if (typeof release === 'function') release();
+          if (typeof unwatch === 'function') {
+            try {
+              unwatch();
+            } catch (error) {
+              console.warn('[doki] jobs unwatch failed:', error);
+            }
+          }
+        };
+      }, [sessionId]);
+      return rows;
+    }
+
+    function ListIcon() {
+      return h(
+        'svg',
+        { viewBox: '0 0 16 16', width: 14, height: 14, 'aria-hidden': 'true', focusable: 'false' },
+        h('path', {
+          d: 'M5.6 4.4h7.8M5.6 8h7.8M5.6 11.6h7.8',
+          fill: 'none', stroke: 'currentColor', strokeWidth: 1.3, strokeLinecap: 'round',
+        }),
+        h('circle', { cx: 2.7, cy: 4.4, r: 0.95, fill: 'currentColor' }),
+        h('circle', { cx: 2.7, cy: 8, r: 0.95, fill: 'currentColor' }),
+        h('circle', { cx: 2.7, cy: 11.6, r: 0.95, fill: 'currentColor' })
+      );
+    }
+
+    function SpinnerIcon() {
+      return h(
+        'svg',
+        { viewBox: '0 0 16 16', width: 14, height: 14, 'aria-hidden': 'true', focusable: 'false' },
+        h('circle', {
+          cx: 8, cy: 8, r: 6.1,
+          fill: 'none', stroke: 'currentColor', strokeWidth: 1.3,
+          strokeDasharray: '24 15', strokeLinecap: 'round',
+        })
+      );
+    }
+
+    function isLiveJob(view) {
+      if (view === null || typeof view !== 'object') return false;
+      const status = view.status;
+      return status !== 'completed' && status !== 'killed' && status !== 'failed';
+    }
+
+    // Only sources with something to say are queued. An empty list means the
+    // cell renders nothing at all, so it never leaves a blank gap in the dock.
+    function buildFeedSources(todos, jobs, feed, t) {
+      const sources = [];
+      if (feed.todos && Array.isArray(todos) && todos.length > 0) {
+        let done = 0;
+        for (let i = 0; i < todos.length; i += 1) {
+          const item = todos[i];
+          if (item !== null && typeof item === 'object' && item.status === 'completed') done += 1;
+        }
+        sources.push({
+          key: 'todos',
+          label: t('feedTodo'),
+          value: String(done) + '/' + String(todos.length),
+          title: t('feedTodosDesc'),
+          list: true,
+        });
+      }
+      if (feed.jobs && Array.isArray(jobs) && jobs.length > 0) {
+        let live = 0;
+        for (let i = 0; i < jobs.length; i += 1) {
+          if (isLiveJob(jobs[i])) live += 1;
+        }
+        if (live > 0) {
+          sources.push({
+            key: 'jobs',
+            label: t('feedJob'),
+            value: String(live),
+            title: t('feedJobsDesc'),
+            list: false,
+          });
+        }
+      }
+      return sources;
+    }
+
+    function DokiFeed(props) {
+      const t = typeof props.t === 'function'
+        ? props.t
+        : (key) => (DICT.zh[key] !== undefined ? DICT.zh[key] : key);
+
+      const [prefs, setLocalPrefs] = useState(getPrefs);
+      useEffect(() => subscribePrefs(setLocalPrefs), []);
+
+      // Same optional-projection guard as the stats pill: the fallback is a
+      // hook-shaped stand-in, so the hook order never changes.
+      const useProjection = typeof props.useProjection === 'function' ? props.useProjection : function useNoProjection() {
+        useState(0);
+        return undefined;
+      };
+      const todos = useProjection('todos');
+      const sessionKey = typeof props.sessionId === 'string' ? props.sessionId : '';
+      const jobs = useJobsRows(sessionKey);
+
+      const [index, setIndex] = useState(0);
+      const feed = prefs.feed;
+      const sources = buildFeedSources(todos, jobs, feed, t);
+
+      useEffect(() => {
+        if (!feed.ticker || sources.length < 2) return undefined;
+        const handle = window.setInterval(() => setIndex((value) => value + 1), FEED_INTERVAL_MS);
+        return () => window.clearInterval(handle);
+      }, [feed.ticker, sources.length]);
+
+      if (!feed.ticker || sources.length === 0) return null;
+
+      // Modulo keeps the slide valid when a source disappears mid-cycle, and
+      // the range check keeps a stale or corrupted counter from indexing past
+      // the list (the counter lives in hook state, which outlives any array).
+      const safe = typeof index === 'number' && isFinite(index) && index >= 0 ? Math.floor(index) : 0;
+      const current = sources[safe % sources.length] || sources[0];
+      if (current === undefined) return null;
+
+      return h(
+        'span',
+        { className: 'doki-feed' },
+        h(
+          'button',
+          {
+            type: 'button',
+            className: 'doki-feedPill',
+            'data-doki-feed': current.key,
+            title: current.title,
+            'aria-label': t('feedTicker') + ' ' + current.label + ' ' + current.value,
+            onClick: () => setIndex((value) => value + 1),
+          },
+          current.list ? h(ListIcon, null) : h(SpinnerIcon, null),
+          h(
+            'span',
+            { className: 'doki-feedText' },
+            h('span', { className: 'doki-feedKey' }, current.label + ' '),
+            h('span', { className: 'doki-feedValue' }, current.value)
+          )
+        )
+      );
+    }
+
     /**
      * The "Dock" settings page: every entry the dock row can show, ours and the
      * shipped ones, with one switch each. It carries its own copy and write path
@@ -1301,9 +1622,11 @@ window.__ModuleLoader__.load({
       useEffect(() => subscribePrefs(setLocalPrefs), []);
 
       const flip = (group, field) => {
-        const next = { ...prefs.view, ...prefs.host, ...prefs.seg };
+        const next = { ...prefs.view, ...prefs.host, ...prefs.seg, ...prefs.feed };
         if (group === 'seg') {
           next[field] = !prefs.seg[field];
+        } else if (group === 'feed') {
+          next[field] = !prefs.feed[field];
         } else {
           next[field] = !(group === 'view' ? prefs.view[field] : prefs.host[field]);
         }
@@ -1345,7 +1668,9 @@ window.__ModuleLoader__.load({
       };
 
       const item = (group, field, labelKey, descKey, segs) => {
-        const checked = group === 'view' ? prefs.view[field] : prefs.host[field];
+        const checked = group === 'view'
+          ? prefs.view[field]
+          : (group === 'feed' ? prefs.feed[field] : prefs.host[field]);
         return h(
           'div',
           {
@@ -1410,6 +1735,16 @@ window.__ModuleLoader__.load({
         ),
 
         h(
+          'section',
+          { className: 'doki-group' },
+          h('h4', { className: 'doki-groupTitle' }, t('feedGroup')),
+          h('p', { className: 'doki-groupNote' }, t('feedNote')),
+          item('feed', 'ticker', 'feedTicker', 'feedTickerDesc'),
+          item('feed', 'todos', 'feedTodos', 'feedTodosDesc'),
+          item('feed', 'jobs', 'feedJobs', 'feedJobsDesc')
+        ),
+
+        h(
           'div',
           { className: 'doki-pageFoot' },
           h(
@@ -1418,7 +1753,7 @@ window.__ModuleLoader__.load({
               type: 'button',
               className: 'doki-reset',
               'data-doki-reset': 'all',
-              onClick: () => setPrefs({ ...DEFAULT_PREFS, ...DEFAULT_HOST, ...DEFAULT_SEG }),
+              onClick: () => setPrefs({ ...DEFAULT_PREFS, ...DEFAULT_HOST, ...DEFAULT_SEG, ...DEFAULT_FEED }),
             },
             t('reset')
           )
@@ -1514,6 +1849,32 @@ window.__ModuleLoader__.load({
         );
       } catch (error) {
         console.warn('[doki] slot registration skipped:', error);
+      }
+
+      // The rotating cell reads the optional client `jobs` service. It is
+      // fetched with `ctx.get` (a plain lookup) rather than declared in
+      // `inject`: a declared service gates activation, and one that never
+      // settles would keep this entry pending and fail the whole boot.
+      try {
+        attachJobs(ctx);
+      } catch (error) {
+        console.warn('[doki] jobs lookup skipped:', error);
+      }
+
+      try {
+        ctx.slots.inject('conversation.composer.dock', () =>
+          ctx.slots.register(
+            {
+              name: 'conversation.composer.dock',
+              id: 'doki-feed',
+              order: 101,
+              locale: NS,
+            },
+            DokiFeed
+          )
+        );
+      } catch (error) {
+        console.warn('[doki] feed slot registration skipped:', error);
       }
 
       try {

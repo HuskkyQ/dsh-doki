@@ -35,6 +35,26 @@
 - 「耗时」「首字」是**会话维度**的，跟着当前打开的会话走，切换会话立刻变成那个会话的数据（这是官方投影的定义，不是本插件累计的）。
 - 这两项对投影的每次读取都做 `typeof === 'number'` 校验：宿主换形状、字段缺失、值是 `NaN` 都只会让那一格消失，不会印出 `NaN` 或 `undefined`。
 
+## 小信息轮播格
+
+底栏还剩一段空位（1440 窗口下约 500px），与其继续往里堆常驻数字，不如放一个**定宽**的格子，内部轮换显示「小而散、但开发时想顺手瞄一眼」的信息。宽度恒定 176px，所以加多少种源都不会把 dock 撑宽、也不会换行。
+
+| 轮换项 | 内容 | 数据来源 | 默认 |
+| --- | --- | --- | --- |
+| **待办进度** | `待办 3/5`（完成数 / 总数） | 官方 `todos` 投影（纯客户端） | 开 |
+| **后台任务** | `后台 2`（运行中的任务数） | 客户端 `jobs` 服务的 `state`（`watchRows` 订阅） | 开 |
+
+![待办进度](preview/feed-todos.png)
+![后台任务](preview/feed-jobs.png)
+
+- 每 `FEED_INTERVAL_MS = 4000` ms 换一张，点一下也能立刻换到下一张；`hover` 有和宿主 pill 一样的底色。
+- 只有**一个**源时它常显、不启动定时器（不白白每秒唤醒一次）；零个源时整格不渲染 —— 没待办也没后台任务时，dock 里不会多出一个空壳。
+- 「待办」读 `useProjection('todos')`，是纯客户端投影；「后台」读客户端 `jobs` 服务，**通过 `ctx.get('jobs')` 而不是 `ctx.jobs`**：写进 `inject` 等于声明激活依赖，服务没就绪会让这个 entry 永远 `pending`，而 `pending` 的 entry 会让整个应用报 `web boot: N entries did not activate` 起不来。所以它是可选的 —— 服务不在就只是少了这一张。
+- `jobs` 的行数据不是 `subscribe` 就有：名册由一条 `job.list` 流填充，必须用 `watchRows(sessionId)` 打开（引用计数），卸载时 release。只订阅不 watch，这张永远是空的（这是实现时踩过的坑）。
+- `jobs` 的服务解析放在**组件挂载时**而不是 `apply()` 里：`apply` 执行时该服务可能还没注册，挂载是它确定存在的第一个时机，顺便也让「晚注册的服务」能被后续挂载捡到。
+- 后台任务按会话隔离（宿主 `jobs.list(caller)` 的语义是 `owner === undefined || owner.id === caller`），所以别的会话在跑的任务不会算进当前这一格。
+- 三个开关（整格 / 待办 / 后台）都在「Dock 设置」页的**「小信息轮播」**分组里。
+
 ## 落在哪个 slot
 
 `conversation.composer.dock`（kind `list` / scope `session` / replaceRisk `none`，官方描述 "Ambient entries below the composer card."）。
@@ -78,10 +98,10 @@ npm publish
 | `package.json` | bundle manifest：`main`/`exports`/`files`、`dsh.bundle.patch`、`dsh.client{platform:'web', immediately:true}` |
 | `cordis.patch.yml` | 插入一行 `doki` |
 | `index.js` | host 半身，故意为空（`export function apply() {}`）—— 纯客户端装饰最安全的形态 |
-| `client.js` | 全部逻辑：locale 字典、CSS、计数器、pill + 弹层、`conversation.composer.dock` 与 `settings.section`（Dock 设置页）两个注册 |
+| `client.js` | 全部逻辑：locale 字典、CSS、计数器、pill + 弹层、`conversation.composer.dock`（统计 pill 与小信息轮播格）、`settings.section`（Dock 设置页）三个注册 |
 | `locale/zh.json` · `locale/en.json` | 插件列表里的标题与描述 |
 | `icon.svg` | 插件图标 |
-| `preview/` | 实机验证截图（`overview.png` 整页、`dock-bar.png` 底栏特写、`dialog.png` 明细弹层、`settings-dock.png` / `settings-dock-dark.png` Dock 设置页浅色/深色（含细分胶囊）、`dock-segments.png` 半边隐藏后的底栏、`dock-hidden.png` 关掉宿主三条后的底栏、`dialog-narrow.png` 窄屏弹层、`dock-dark.png` / `dock-light.png` 主题、`switch-in-list.png` / `switch-in-detail.png` 两级开关位置、`nav-icon.png` 侧栏图标特写、`dock-elapsed.png` 开启耗时+首字后的底栏、`dialog-elapsed.png` 五项齐全的弹层、`settings-groups.png` 三组设置项的完整页面） |
+| `preview/` | 实机验证截图（`overview.png` 整页、`dock-bar.png` 底栏特写、`feed-todos.png` / `feed-jobs.png` 轮播格的两张状态、`dialog.png` 明细弹层、`settings-dock.png` / `settings-dock-dark.png` Dock 设置页浅色/深色（含细分胶囊）、`dock-segments.png` 半边隐藏后的底栏、`dock-hidden.png` 关掉宿主三条后的底栏、`dialog-narrow.png` 窄屏弹层、`dock-dark.png` / `dock-light.png` 主题、`switch-in-list.png` / `switch-in-detail.png` 两级开关位置、`nav-icon.png` 侧栏图标特写、`dock-elapsed.png` 开启耗时+首字后的底栏、`dialog-elapsed.png` 五项齐全的弹层、`settings-groups.png` 三组设置项的完整页面） |
 
 ## 健壮性
 
@@ -140,6 +160,9 @@ plugin_manager install_bundle(target="/绝对路径/dsh-doki-1.0.0.tgz")
 | 宿主统计（DSH 自带） | 会话统计 | 开 | 隐藏官方那条「N 轮 M 步 · tok/s」pill |
 | | Token 用量 | 开 | 隐藏官方那条「tok · 缓存命中」pill |
 | | 上下文指示器 | 开 | 隐藏官方那个上下文占用环 |
+| 小信息轮播（本插件） | 轮播格 | 开 | 整格隐藏，不在 dock 留空位 |
+| | 待办进度 | 开 | 轮播里不再出现「待办 N/M」 |
+| | 后台任务 | 开 | 轮播里不再出现「后台 N」 |
 
 #### 宿主三行的「细分」
 
@@ -156,8 +179,8 @@ plugin_manager install_bundle(target="/绝对路径/dsh-doki-1.0.0.tgz")
 - 默认全亮，所以老用户升级后看到的还是原来的完整 pill。
 
 - 本插件三项**全关**是允许的：那一格整体隐藏，不在 dock 里留空位。
-- 「恢复默认」按钮一键回到上表的默认值（含细分胶囊）。
-- 选择存在浏览器 `localStorage` 的 `dsh.doki.view.v1`（如 `{"typing":true,"chars":true,"thinking":false,"elapsed":false,"ttft":false,"activity":true,"usage":true,"meter":true,"activityCounts":true,"activitySpeed":true,"usageTokens":true,"usageCache":true,"meterRing":true,"meterPercent":true}`），跟宿主自己的视图偏好（输入框宽度等）放在同一处；清掉这一项就回到默认。
+- 「恢复默认」按钮一键回到上表的默认值（含细分胶囊与轮播格）。
+- 选择存在浏览器 `localStorage` 的 `dsh.doki.view.v1`（如 `{"typing":true,"chars":true,"thinking":false,"elapsed":false,"ttft":false,"activity":true,"usage":true,"meter":true,"activityCounts":true,"activitySpeed":true,"usageTokens":true,"usageCache":true,"meterRing":true,"meterPercent":true,"ticker":true,"todos":true,"jobs":true}`），跟宿主自己的视图偏好（输入框宽度等）放在同一处；清掉这一项就回到默认。旧版本存下的、没有 `ticker`/`todos`/`jobs` 键的记录按默认（全开）处理，不会因为缺键而把轮播格关掉。
 - 本插件弹层里五项**始终齐全**，不受这里的选择影响——关掉某一项只是不在底栏常驻显示，数据仍然可以看到。
 - 这一页注册在 `settings.section`（kind `list` / scope `root` / replaceRisk `none`），id `dock`、order `110`，排在官方五项与第三方「bili 设置」之后。行样式用 `--dsw-alias-*` token 仿照宿主设置行（左标题+描述、右 switch），不依赖宿主的 hash 类名。
 
@@ -225,4 +248,11 @@ plugin_manager install_bundle(target="/绝对路径/dsh-doki-1.0.0.tgz")
   - 新会话（无任何生成记录）下整条 pill 为 `null`——两项投影字段都没有值时不渲染空壳。
   - 窄屏 760px：我的 pill `left:479 / right:737`，在视口内，`dockOverflow: false`。
   - 全程 `pageerror` 为空；主进程存活、无新增 crash log。
+- 轮播格的验证（2026-10-23）：
+  - 离线预演 `/tmp/preflight-feed.cjs` **51 项断言全绿**：注册（三个 slot 条目 + `inject ["slots","locale"]`）、显示（无数据→`null`；仅待办→`待办 1/3`；仅后台→`后台 1`；`completed` 不算运行中、`stopping` 算；两条运行中→`后台 2`；别的 session 的 jobs 忽略）、轮换（起始 `todos` → tick 1 `jobs` → tick 2 `todos`，**只注册 1 个 4000ms interval**；只剩一个源时 timer 停止；unmount 清空 timer）、点击立刻换张、异常（`ctx.get` 抛错被吞、`getSnapshot` 抛错被吞、`rows[sid]` 非数组被忽略、无 jobs 服务时待办仍正常）、props 容错（无 `useProjection`/`sessionId`/`t` 都不崩，`todos` 是字符串/空数组/`{length:3}` 都不渲染）、设置页（11 个开关、四个分组标题）、持久化（`ticker:false` 重载后仍隐藏；**旧版 localStorage 无 feed 键默认全开**）、回归（stats pill 不变）。
+  - 真实页面（会话「开发 DSH 翻页时钟」，自签 auth cookie）：12 次采样实测在 `todos: 待办 3/5` 与 `jobs: 后台 2` 之间来回切换，与宿主 header 的「3 个后台任务运行中」一致。
+  - 尺寸：格子宽恒定 176px、高 22px，dock 高恒 26px（加格子前后不变），`afterMeter: true`。
+  - 开关：关「轮播格」→ 格子消失、`localStorage.ticker === false`、reload 后仍消失；再打开恢复。
+  - 踩过的坑（已修，记录以免复现）：① 装的是 tarball 的**实体目录**而非 symlink，改了源码页面不变 —— 本地开发必须 link 安装；② 只 `subscribe` 不 `watchRows`，`jobs` 永远空；③ `apply()` 里解析 `ctx.get('jobs')` 拿到 `undefined`（服务尚未注册），必须推迟到挂载时。
+  - 全程 `pageerror` 为空。
 - 安装前后 `~/Library/Logs/DeepSeek Harness/` 无新增 crash log，主进程存活。

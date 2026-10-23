@@ -1,6 +1,6 @@
 {
   "name": "dsh-doki",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": false,
   "type": "module",
   "description": "Composer typing statistics: typing time, cumulative characters typed and thinking time, shown after the context meter in the same pill style as the session/Token stats.",

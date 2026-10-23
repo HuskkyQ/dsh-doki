@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Typing Stats",
-    "description": "Shows typing time, cumulative characters typed and thinking time beside the composer, plus optional session time and first-token latency; also adds a Dock settings page that toggles every composer dock entry, down to each half of the built-in session stats, token usage and context meter."
+    "description": "Shows typing time, cumulative characters typed and thinking time beside the composer, plus optional session time and first-token latency; a fixed-width cell rotates between todo progress and running background jobs every 4 seconds; and a Dock settings page toggles every composer dock entry, down to each half of the built-in session stats, token usage and context meter."
   }
 }
