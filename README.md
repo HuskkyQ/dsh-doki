@@ -55,7 +55,7 @@
 
 | 方式 | 命令 | 说明 |
 | --- | --- | --- |
-| npm | `plugin_manager install_bundle(target="dsh-doki")` | 走 registry，装的是发布到 npm 的那份 |
+| npm | `plugin_manager install_bundle(target="dsh-doki")` | 走 registry，装的是发布到 npm 的那份（`npm view dsh-doki version` → 1.0.0） |
 | GitHub | `plugin_manager install_bundle(target="https://github.com/HuskkyQ/dsh-doki")` | `plugin_manager` 用 pnpm 的 git 依赖装，读仓库根目录的 `package.json` |
 | tarball | `plugin_manager install_bundle(target="/绝对路径/dsh-doki-1.0.0.tgz")` | Release 附件里的那份，内容与 npm 包一致 |
 
