@@ -49,6 +49,28 @@
 
 本插件按同一套 token 和同样的尺寸复刻了一遍（类名前缀 `doki-`，不与宿主的 hash 类冲突），实机计算样式与宿主逐项一致：pill `font-size 12px / line-height 20px / padding 1px 8px / radius 8px / gap 6px`，面板 `bg rgba(248,249,250,.58) / radius 16px / padding 16px / blur(40px) saturate(1.5) / 12px`。图标是内联 SVG（不依赖任何图标包），弹层用 `ReactDOM.createPortal` 挂到 `document.body`，位置按 pill 的 `getBoundingClientRect()` 手动定位（优先在 pill 上方，空间不够翻到下方），Esc / 点击外部 / 滚动 / resize 都会关闭或跟随。
 
+## 从哪来 / 怎么分发
+
+这个包本身就是一个标准的 DSH bundle，没有构建步骤（`client.js` 是可直接被浏览器求值的普通 JavaScript，不用 JSX/TypeScript），所以三种分发方式都能装：
+
+| 方式 | 命令 | 说明 |
+| --- | --- | --- |
+| npm | `plugin_manager install_bundle(target="dsh-doki")` | 走 registry，装的是发布到 npm 的那份 |
+| GitHub | `plugin_manager install_bundle(target="https://github.com/HuskkyQ/dsh-doki")` | `plugin_manager` 用 pnpm 的 git 依赖装，读仓库根目录的 `package.json` |
+| tarball | `plugin_manager install_bundle(target="/绝对路径/dsh-doki-1.0.0.tgz")` | Release 附件里的那份，内容与 npm 包一致 |
+
+GitHub 与 tarball 两种方式都在真实 profile 上装过一遍并验证了底栏渲染，装出来的是 `node_modules` 里的实体目录；npm 走 registry，同样落成实体目录。只有本地包目录（绝对路径）安装才是 symlink，适合开发时边改边看。
+
+发布新版本：
+
+```bash
+npm version patch        # 或 minor / major
+git push --follow-tags
+npm pack                 # 产出 dsh-doki-<version>.tgz
+gh release create v<version> dsh-doki-<version>.tgz --title "dsh-doki <version>" --notes "..."
+npm publish
+```
+
 ## 文件
 
 | 文件 | 作用 |
@@ -98,7 +120,7 @@ plugin_manager install_bundle(target="/绝对路径/dsh-doki-1.0.0.tgz")
 两级都实测过：关整包后 `[data-composer-stat="doki"]` 计数从 1 变 0、`bundles` 数组少一项；重新打开后恢复为 1、数组复原。关组件后 patch 里多出 `disabled: true` 覆盖行，重新打开后该行被移除。
 
 - 开关是纯本地配置，不联网。
-- 关掉整包**不会**卸载代码（`node_modules` 里的 link 还在，源码目录也在），随时打开即可回来；真要删干净用详情页右上角的「卸载」按钮（红色）。
+- 关掉整包**不会**卸载代码（`node_modules` 里的包还在），随时打开即可回来；真要删干净用详情页右上角的「卸载」按钮（红色）。
 - 两个开关都关掉后，插件行不再出现在输入框下方，`conversation.composer.dock` 只剩官方的 `activity` / `usage` 两条。
 
 ## 「Dock 设置」页：一处开关所有底栏项
