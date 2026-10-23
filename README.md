@@ -35,25 +35,32 @@
 - 「耗时」「首字」是**会话维度**的，跟着当前打开的会话走，切换会话立刻变成那个会话的数据（这是官方投影的定义，不是本插件累计的）。
 - 这两项对投影的每次读取都做 `typeof === 'number'` 校验：宿主换形状、字段缺失、值是 `NaN` 都只会让那一格消失，不会印出 `NaN` 或 `undefined`。
 
-## 小信息轮播格
+## 同一个格子里的轮播
 
-底栏还剩一段空位（1440 窗口下约 500px），与其继续往里堆常驻数字，不如放一个**定宽**的格子，内部轮换显示「小而散、但开发时想顺手瞄一眼」的信息。宽度恒定 176px，所以加多少种源都不会把 dock 撑宽、也不会换行。
+底栏只有一格给这个插件。与其为「小而散、开发时想顺手瞄一眼」的信息再占一格，不如让**同一格**轮流显示它们：打字统计、待办进度、后台任务共用 200px 的宽度，竖向滚动切换。宽度恒定，所以加多少种源都不会把 dock 撑宽、也不会换行。
 
 | 轮换项 | 内容 | 数据来源 | 默认 |
 | --- | --- | --- | --- |
+| **打字统计** | `打字 2秒·字数 23字` | 本插件自己的计数 | 开 |
 | **待办进度** | `待办 3/5`（完成数 / 总数） | 官方 `todos` 投影（纯客户端） | 开 |
 | **后台任务** | `后台 2`（运行中的任务数） | 客户端 `jobs` 服务的 `state`（`watchRows` 订阅） | 开 |
 
 ![待办进度](preview/feed-todos.png)
 ![后台任务](preview/feed-jobs.png)
+![滚动中](preview/feed-roll.png)
 
-- 每 `FEED_INTERVAL_MS = 4000` ms 换一张，点一下也能立刻换到下一张；`hover` 有和宿主 pill 一样的底色。
-- 只有**一个**源时它常显、不启动定时器（不白白每秒唤醒一次）；零个源时整格不渲染 —— 没待办也没后台任务时，dock 里不会多出一个空壳。
+![轮播内容的设置](preview/settings-rotation.png)
+
+- 每 `FEED_INTERVAL_MS = 4000` ms 换一张。换的时候不是硬替换，而是**竖向滚入**：旧的一行向上滚出、新的一行从下面滚进来，`FEED_ROLL_MS = 520` ms 走完，用的是 `cubic-bezier(.22,.61,.36,1)` 的缓出曲线，所以是「滑上去」而不是「跳一下」。动画比节拍短，滚完会静止停一会儿，不会一直晃。
+- 滚动的实现是一个只露一行高的 `.doki-viewport`（`height: var(--doki-row-h)`，`overflow: hidden`）套一层 `.doki-track`，滚动的那 520ms 里 track 里临时有两行，`transform: translateY(-一行高)` 走完就把索引推进、第二行变成第一行。静止时 DOM 里只有一行。
+- 尊重系统的「减少动态效果」：`prefers-reduced-motion: reduce` 下动画直接关掉，只保留内容切换。
+- 只有**一个**源时它常显、不启动定时器（不白白每 4 秒唤醒一次）；零个源时整格不渲染 —— 没数据时 dock 里不会多出一个空壳。
+- 点格子不切下一张，而是打开弹层：弹层里一次列全所有内容（打字/字数/思考/耗时/首字 + 待办/后台），不用等它轮过来。
 - 「待办」读 `useProjection('todos')`，是纯客户端投影；「后台」读客户端 `jobs` 服务，**通过 `ctx.get('jobs')` 而不是 `ctx.jobs`**：写进 `inject` 等于声明激活依赖，服务没就绪会让这个 entry 永远 `pending`，而 `pending` 的 entry 会让整个应用报 `web boot: N entries did not activate` 起不来。所以它是可选的 —— 服务不在就只是少了这一张。
 - `jobs` 的行数据不是 `subscribe` 就有：名册由一条 `job.list` 流填充，必须用 `watchRows(sessionId)` 打开（引用计数），卸载时 release。只订阅不 watch，这张永远是空的（这是实现时踩过的坑）。
 - `jobs` 的服务解析放在**组件挂载时**而不是 `apply()` 里：`apply` 执行时该服务可能还没注册，挂载是它确定存在的第一个时机，顺便也让「晚注册的服务」能被后续挂载捡到。
 - 后台任务按会话隔离（宿主 `jobs.list(caller)` 的语义是 `owner === undefined || owner.id === caller`），所以别的会话在跑的任务不会算进当前这一格。
-- 三个开关（整格 / 待办 / 后台）都在「Dock 设置」页的**「小信息轮播」**分组里。
+- 三个开关（轮播 / 待办 / 后台）都在「Dock 设置」页的**「轮播内容」**分组里；关掉「轮播」就只剩打字统计那一张，不再滚动。
 
 ## 落在哪个 slot
 
@@ -75,9 +82,9 @@
 
 | 方式 | 命令 | 说明 |
 | --- | --- | --- |
-| npm | `plugin_manager install_bundle(target="dsh-doki")` | 走 registry，装的是发布到 npm 的那份（`npm view dsh-doki version` → 1.0.0） |
+| npm | `plugin_manager install_bundle(target="dsh-doki")` | 走 registry，装的是发布到 npm 的那份（`npm view dsh-doki version` → 1.2.0） |
 | GitHub | `plugin_manager install_bundle(target="https://github.com/HuskkyQ/dsh-doki")` | `plugin_manager` 用 pnpm 的 git 依赖装，读仓库根目录的 `package.json` |
-| tarball | `plugin_manager install_bundle(target="/绝对路径/dsh-doki-1.0.0.tgz")` | Release 附件里的那份，内容与 npm 包一致 |
+| tarball | `plugin_manager install_bundle(target="/绝对路径/dsh-doki-1.2.0.tgz")` | Release 附件里的那份，内容与 npm 包一致 |
 
 GitHub 与 tarball 两种方式都在真实 profile 上装过一遍并验证了底栏渲染，装出来的是 `node_modules` 里的实体目录；npm 走 registry，同样落成实体目录。只有本地包目录（绝对路径）安装才是 symlink，适合开发时边改边看。
 
@@ -98,10 +105,10 @@ npm publish
 | `package.json` | bundle manifest：`main`/`exports`/`files`、`dsh.bundle.patch`、`dsh.client{platform:'web', immediately:true}` |
 | `cordis.patch.yml` | 插入一行 `doki` |
 | `index.js` | host 半身，故意为空（`export function apply() {}`）—— 纯客户端装饰最安全的形态 |
-| `client.js` | 全部逻辑：locale 字典、CSS、计数器、pill + 弹层、`conversation.composer.dock`（统计 pill 与小信息轮播格）、`settings.section`（Dock 设置页）三个注册 |
+| `client.js` | 全部逻辑：locale 字典、CSS、计数器、pill + 弹层、`conversation.composer.dock`（同一个 pill 里轮播打字统计 / 待办 / 后台）、`settings.section`（Dock 设置页）三个注册 |
 | `locale/zh.json` · `locale/en.json` | 插件列表里的标题与描述 |
 | `icon.svg` | 插件图标 |
-| `preview/` | 实机验证截图（`overview.png` 整页、`dock-bar.png` 底栏特写、`feed-todos.png` / `feed-jobs.png` 轮播格的两张状态、`dialog.png` 明细弹层、`settings-dock.png` / `settings-dock-dark.png` Dock 设置页浅色/深色（含细分胶囊）、`dock-segments.png` 半边隐藏后的底栏、`dock-hidden.png` 关掉宿主三条后的底栏、`dialog-narrow.png` 窄屏弹层、`dock-dark.png` / `dock-light.png` 主题、`switch-in-list.png` / `switch-in-detail.png` 两级开关位置、`nav-icon.png` 侧栏图标特写、`dock-elapsed.png` 开启耗时+首字后的底栏、`dialog-elapsed.png` 五项齐全的弹层、`settings-groups.png` 三组设置项的完整页面） |
+| `preview/` | 实机验证截图（`overview.png` 整页、`dock-bar.png` 底栏特写、`feed-stats.png` / `feed-todos.png` / `feed-jobs.png` 三张轮播状态、`feed-roll.png` 滚动中间帧、`settings-rotation.png`「轮播内容」分组、`dialog.png` 明细弹层、`settings-dock.png` / `settings-dock-dark.png` Dock 设置页浅色/深色（含细分胶囊）、`dock-segments.png` 半边隐藏后的底栏、`dock-hidden.png` 关掉宿主三条后的底栏、`dialog-narrow.png` 窄屏弹层、`dock-narrow.png` 760px 窄屏底栏、`dock-dark.png` / `dock-light.png` 主题、`switch-in-list.png` / `switch-in-detail.png` 两级开关位置、`nav-icon.png` 侧栏图标特写、`dock-elapsed.png` 开启耗时+首字后的底栏、`dialog-elapsed.png` 五项齐全的弹层、`settings-groups.png` 三组设置项的完整页面） |
 
 ## 健壮性
 
@@ -121,7 +128,7 @@ plugin_manager install_bundle(target="dsh-doki")
 plugin_manager install_bundle(target="https://github.com/HuskkyQ/dsh-doki")
 
 # 3. 从下载到本地的 .tgz（Release 附件）
-plugin_manager install_bundle(target="/绝对路径/dsh-doki-1.0.0.tgz")
+plugin_manager install_bundle(target="/绝对路径/dsh-doki-1.2.0.tgz")
 ```
 
 装好后 bundle 名是 `dsh-doki`，patch row 是 `doki`。本地开发时也可以直接指向包目录（绝对路径），此时是 link 安装，改完源码刷新页面即可看到效果。
@@ -160,7 +167,7 @@ plugin_manager install_bundle(target="/绝对路径/dsh-doki-1.0.0.tgz")
 | 宿主统计（DSH 自带） | 会话统计 | 开 | 隐藏官方那条「N 轮 M 步 · tok/s」pill |
 | | Token 用量 | 开 | 隐藏官方那条「tok · 缓存命中」pill |
 | | 上下文指示器 | 开 | 隐藏官方那个上下文占用环 |
-| 小信息轮播（本插件） | 轮播格 | 开 | 整格隐藏，不在 dock 留空位 |
+| 轮播内容（本插件） | 轮播 | 开 | 只剩打字统计一张，不再滚动 |
 | | 待办进度 | 开 | 轮播里不再出现「待办 N/M」 |
 | | 后台任务 | 开 | 轮播里不再出现「后台 N」 |
 
@@ -179,8 +186,8 @@ plugin_manager install_bundle(target="/绝对路径/dsh-doki-1.0.0.tgz")
 - 默认全亮，所以老用户升级后看到的还是原来的完整 pill。
 
 - 本插件三项**全关**是允许的：那一格整体隐藏，不在 dock 里留空位。
-- 「恢复默认」按钮一键回到上表的默认值（含细分胶囊与轮播格）。
-- 选择存在浏览器 `localStorage` 的 `dsh.doki.view.v1`（如 `{"typing":true,"chars":true,"thinking":false,"elapsed":false,"ttft":false,"activity":true,"usage":true,"meter":true,"activityCounts":true,"activitySpeed":true,"usageTokens":true,"usageCache":true,"meterRing":true,"meterPercent":true,"ticker":true,"todos":true,"jobs":true}`），跟宿主自己的视图偏好（输入框宽度等）放在同一处；清掉这一项就回到默认。旧版本存下的、没有 `ticker`/`todos`/`jobs` 键的记录按默认（全开）处理，不会因为缺键而把轮播格关掉。
+- 「恢复默认」按钮一键回到上表的默认值（含细分胶囊与轮播内容）。
+- 选择存在浏览器 `localStorage` 的 `dsh.doki.view.v1`（如 `{"typing":true,"chars":true,"thinking":false,"elapsed":false,"ttft":false,"activity":true,"usage":true,"meter":true,"activityCounts":true,"activitySpeed":true,"usageTokens":true,"usageCache":true,"meterRing":true,"meterPercent":true,"ticker":true,"todos":true,"jobs":true}`），跟宿主自己的视图偏好（输入框宽度等）放在同一处；清掉这一项就回到默认。旧版本存下的、没有 `ticker`/`todos`/`jobs` 键的记录按默认（全开）处理，不会因为缺键而把轮播关掉。
 - 本插件弹层里五项**始终齐全**，不受这里的选择影响——关掉某一项只是不在底栏常驻显示，数据仍然可以看到。
 - 这一页注册在 `settings.section`（kind `list` / scope `root` / replaceRisk `none`），id `dock`、order `110`，排在官方五项与第三方「bili 设置」之后。行样式用 `--dsw-alias-*` token 仿照宿主设置行（左标题+描述、右 switch），不依赖宿主的 hash 类名。
 
@@ -248,11 +255,12 @@ plugin_manager install_bundle(target="/绝对路径/dsh-doki-1.0.0.tgz")
   - 新会话（无任何生成记录）下整条 pill 为 `null`——两项投影字段都没有值时不渲染空壳。
   - 窄屏 760px：我的 pill `left:479 / right:737`，在视口内，`dockOverflow: false`。
   - 全程 `pageerror` 为空；主进程存活、无新增 crash log。
-- 轮播格的验证（2026-10-23）：
-  - 离线预演 `/tmp/preflight-feed.cjs` **51 项断言全绿**：注册（三个 slot 条目 + `inject ["slots","locale"]`）、显示（无数据→`null`；仅待办→`待办 1/3`；仅后台→`后台 1`；`completed` 不算运行中、`stopping` 算；两条运行中→`后台 2`；别的 session 的 jobs 忽略）、轮换（起始 `todos` → tick 1 `jobs` → tick 2 `todos`，**只注册 1 个 4000ms interval**；只剩一个源时 timer 停止；unmount 清空 timer）、点击立刻换张、异常（`ctx.get` 抛错被吞、`getSnapshot` 抛错被吞、`rows[sid]` 非数组被忽略、无 jobs 服务时待办仍正常）、props 容错（无 `useProjection`/`sessionId`/`t` 都不崩，`todos` 是字符串/空数组/`{length:3}` 都不渲染）、设置页（11 个开关、四个分组标题）、持久化（`ticker:false` 重载后仍隐藏；**旧版 localStorage 无 feed 键默认全开**）、回归（stats pill 不变）。
-  - 真实页面（会话「开发 DSH 翻页时钟」，自签 auth cookie）：12 次采样实测在 `todos: 待办 3/5` 与 `jobs: 后台 2` 之间来回切换，与宿主 header 的「3 个后台任务运行中」一致。
-  - 尺寸：格子宽恒定 176px、高 22px，dock 高恒 26px（加格子前后不变），`afterMeter: true`。
-  - 开关：关「轮播格」→ 格子消失、`localStorage.ticker === false`、reload 后仍消失；再打开恢复。
-  - 踩过的坑（已修，记录以免复现）：① 装的是 tarball 的**实体目录**而非 symlink，改了源码页面不变 —— 本地开发必须 link 安装；② 只 `subscribe` 不 `watchRows`，`jobs` 永远空；③ `apply()` 里解析 `ctx.get('jobs')` 拿到 `undefined`（服务尚未注册），必须推迟到挂载时。
+- 同一个格子里的轮播验证（2026-10-23）：
+  - 离线预演 `/tmp/preflight-merge.cjs` **全部通过**（九个分组）：注册（只有 `stats` 与 `settings` 两个组件，没有独立 feed 组件，`inject ["slots","locale"]`）、slides（`stats` 首张；`ticker:false` 只剩一张且**不注册定时器**；所有 view 项关掉且无数据→`null`；全关但有待办→`todos` 一张；`completed` 不算运行中、`stopping` 算；两条运行中→`后台 2`；别的 session 的 jobs 忽略）、**每张 slide 用自己的图标**（`stats→ClockIcon`、`todos→ListIcon`、`jobs→SpinnerIcon`）、轮换（`stats → todos → jobs → stats`，`rotTimers` 恒为 1，源消失后仍是合法 slide，unmount 清定时器）、点击（**不切 slide**，打开弹层，弹层里同时列出 `待办 1/3` 与 `后台 1`）、异常（无 jobs 服务 / `ctx.get` 抛错 / `getSnapshot` 抛错 / rows 非数组都不影响 apply 与渲染）、订阅（挂载前 0 个 watch、挂载后打开、迟到的 rows 能进 slide、unmount 释放、`watchRows` 抛错被吞）、props 容错（无 `useProjection`/`sessionId`/`t`/`useInput`，`todos` 是垃圾值都不崩）、设置页（11 个开关、`feed:ticker/todos/jobs`、四组标题、reset 生效）、持久化（`ticker:false` 保持单张且无定时器；旧版 localStorage 无 feed 键默认开）、统计回归（3 个字符 → `chars 3char`）。
+  - 真实页面（会话「开发 DSH 翻页时钟」，自签 auth cookie，1440×900）：`anchors: 1` —— dock 里只有一个本插件条目；**宽度 14 次采样恒为 200px**，dock 高恒 26px，`afterMeter: true`。
+  - **滚动动效实测**（`/tmp/verify-roll.mjs`，15 秒 300 帧）：`rollFrames: 40`（滚动确实在发生）；滚动瞬间 DOM 才出现第 2 行（`max rows during roll: 2`，静止时 1 行）；中间态文本出现 `"打字 0秒·字数 0字|待办 4/6"`、`"待办 4/6|后台 1"`、`"后台 1|打字 0秒·字数 0字"` —— 两行同时在，证明是滚入而非替换；`transform` 连续变化 `-1.78 → -6.83 → -10.98 → -14.02 → -16.15 → -17.63 → -18.63 → -19.29 → -19.71 → -19.93`，终值 ≈ 一行高（20px），是缓出曲线。
+  - 弹层实测文本：`打字统计 打字 0秒 字数 0字 思考 16秒 耗时 7时32分 首字 3.5s 待办 4/6 后台 1`，Esc 正常关闭。
+  - 开关：关「轮播」→ 只剩打字统计一张、`localStorage.ticker === false`、reload 后仍如此；再打开恢复轮播。
+  - 踩过的坑（已修，记录以免复现）：① 装的是 tarball 的**实体目录**而非 symlink，改了源码页面不变 —— 本地开发必须 link 安装；② 只 `subscribe` 不 `watchRows`，`jobs` 永远空；③ `apply()` 里解析 `ctx.get('jobs')` 拿到 `undefined`（服务尚未注册），必须推迟到挂载时；④ 轮播条目最初只带 `key` 不带 `kind`，导致三张 slide 全画成时钟图标 —— 图标按 `kind` 选，`kind` 必须跟着源一起产出；⑤ `.doki-label` 继承了 dock 的居中，数字会飘离图标 —— 改成左对齐才读得出「图标 + 内容」是一个整体。
   - 全程 `pageerror` 为空。
 - 安装前后 `~/Library/Logs/DeepSeek Harness/` 无新增 crash log，主进程存活。

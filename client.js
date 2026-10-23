@@ -64,10 +64,10 @@ window.__ModuleLoader__.load({
         segUsageCache: '缓存命中',
         segMeterRing: '占用环',
         segMeterPercent: '百分比',
-        feedGroup: '小信息轮播',
-        feedNote: '在 Dock 里固定占一格，把零散但需要随时扫一眼的信息轮流放进来。点一下立刻切到下一条。',
-        feedTicker: '轮播格',
-        feedTickerDesc: '在 Dock 里占固定宽度的一格，每 4 秒换一条内容；没有可显示的内容时整格自动隐藏。',
+        feedGroup: '轮播内容',
+        feedNote: '这些内容与上面的打字数据共用同一个 Dock 格，轮流显示；点开 Dock 上的格子可以在弹层里一次看全。',
+        feedTicker: '轮播',
+        feedTickerDesc: '把打开的内容放进同一个格子轮流显示，每 4 秒换一条；只有一条时保持不动，全部关闭时整格隐藏。',
         feedTodos: '待办进度',
         feedTodosDesc: '当前会话的待办完成情况（完成数 / 总数）。',
         feedJobs: '后台任务',
@@ -122,10 +122,10 @@ window.__ModuleLoader__.load({
         segUsageCache: 'Cache hit',
         segMeterRing: 'Ring',
         segMeterPercent: 'Percent',
-        feedGroup: 'Small info ticker',
-        feedNote: 'One fixed-width cell in the dock that rotates scattered, glanceable facts. Click to advance.',
-        feedTicker: 'Ticker cell',
-        feedTickerDesc: 'One fixed-width cell in the dock that swaps to the next fact every 4 seconds; the cell hides itself while it has nothing to show.',
+        feedGroup: 'Rotating content',
+        feedNote: 'These share one dock cell with the typing figures above and take turns; open the pill to read them all at once.',
+        feedTicker: 'Rotation',
+        feedTickerDesc: 'Rotate the enabled facts inside one cell, swapping every 4 seconds; a single fact stays put and an empty cell hides itself.',
         feedTodos: 'Todo progress',
         feedTodosDesc: 'Completed over total todos in this session.',
         feedJobs: 'Background jobs',
@@ -148,10 +148,14 @@ window.__ModuleLoader__.load({
         display: inline-flex;
         font-size: calc(var(--dsh-content-font-size-secondary, 13px) - 1px);
         line-height: calc(20px + var(--dsh-content-font-delta-secondary, 0px));
+        --doki-row-h: calc(20px + var(--dsh-content-font-delta-secondary, 0px));
       }
       .doki-pill {
         box-sizing: border-box;
         border-radius: var(--dsw-radius-sm);
+        /* One fixed width for every slide: the dock is centred, so a block that
+           grew and shrank every four seconds would drag the whole row with it. */
+        width: 200px;
         max-width: 100%;
         color: var(--dsw-alias-label-tertiary);
         font: inherit;
@@ -165,60 +169,64 @@ window.__ModuleLoader__.load({
         padding: 1px 8px;
         display: inline-flex;
         cursor: pointer;
+        overflow: hidden;
       }
       .doki-pill svg { flex: none; width: 14px; height: 14px; }
+      /* The slides are stacked in a track and the track rolls up by exactly one
+         row per beat, so a new fact slides in from below instead of replacing
+         the old one between two frames. The viewport clips to one row. */
+      .doki-viewport {
+        height: var(--doki-row-h);
+        min-width: 0;
+        overflow: hidden;
+        flex: 1 1 auto;
+      }
+      .doki-track {
+        display: flex;
+        flex-direction: column;
+        will-change: transform;
+      }
+      .doki-track--roll {
+        animation: doki-roll 520ms cubic-bezier(.22, .61, .36, 1) forwards;
+      }
+      @keyframes doki-roll {
+        from { transform: translateY(0); }
+        to { transform: translateY(calc(-1 * var(--doki-row-h))); }
+      }
+      .doki-row {
+        height: var(--doki-row-h);
+        align-items: center;
+        gap: 6px;
+        display: flex;
+        min-width: 0;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .doki-track--roll { animation: none; }
+      }
       .doki-pill:hover,
       .doki-pill[aria-expanded="true"] {
         background: var(--dsw-alias-interactive-bg-hover);
         color: var(--dsw-alias-label-secondary);
       }
-      .doki-label { text-overflow: ellipsis; min-width: 0; overflow: hidden; }
-      .doki-sep { color: var(--dsw-alias-separator-primary); margin: 0 6px; }
-      /* The rotating cell keeps a fixed footprint so the dock never reflows as
-         sources come and go; a new source costs zero extra width. */
-      .doki-feed {
-        order: 101;
-        min-width: 0;
-        display: inline-flex;
-        font-size: calc(var(--dsh-content-font-size-secondary, 13px) - 1px);
-        line-height: calc(20px + var(--dsh-content-font-delta-secondary, 0px));
-      }
-      .doki-feedPill {
-        box-sizing: border-box;
-        border-radius: var(--dsw-radius-sm);
-        width: 176px;
-        max-width: 100%;
-        color: var(--dsw-alias-label-tertiary);
-        font: inherit;
-        font-variant-numeric: tabular-nums;
-        line-height: inherit;
-        white-space: nowrap;
-        background: 0 0;
-        border: none;
-        align-items: center;
-        gap: 6px;
-        padding: 1px 8px;
-        display: inline-flex;
-        cursor: pointer;
-        overflow: hidden;
-      }
-      .doki-feedPill svg { flex: none; width: 14px; height: 14px; }
-      .doki-feedPill:hover {
-        background: var(--dsw-alias-interactive-bg-hover);
-        color: var(--dsw-alias-label-secondary);
-      }
-      .doki-feedText {
+      .doki-label {
         text-overflow: ellipsis;
         min-width: 0;
         overflow: hidden;
         flex: 1 1 auto;
+        /* The dock centres its text, which would float the figures away from
+           their icon. Left-aligning keeps icon and label reading as one unit,
+           the way the shipped pills do. */
+        text-align: left;
       }
-      .doki-feedKey {
+      .doki-sep { color: var(--dsw-alias-separator-primary); margin: 0 6px; }
+      /* A rotating fact reads as "label value" inside the same pill the typing
+         figures use; the fixed pill width keeps the dock from shifting. */
+      .doki-factKey {
         color: var(--dsw-alias-label-tertiary);
         opacity: .75;
         flex: none;
       }
-      .doki-feedValue { color: var(--dsw-alias-label-secondary); }
+      .doki-factValue { color: var(--dsw-alias-label-secondary); }
       .doki-panel {
         z-index: 1100;
         box-sizing: border-box;
@@ -487,6 +495,9 @@ window.__ModuleLoader__.load({
     // enough to read one line and short enough that a glance at the dock
     // catches the source the reader cares about within a few beats.
     const FEED_INTERVAL_MS = 4000;
+    // One row travels out while the next travels in; the animation is shorter
+    // than the beat so the cell rests still between moves.
+    const FEED_ROLL_MS = 520;
 
     // Invisible characters ride along in contenteditable text and are not
     // characters the user typed: zero-width marks, plus the private-use
@@ -1298,9 +1309,10 @@ window.__ModuleLoader__.load({
         };
       }, [open]);
 
+      // ---- slides -----------------------------------------------------------
       // The bar carries only the figures the user picked in Settings; the
-      // dialog below always lists all three, so nothing becomes unreachable
-      // when a chip is switched off.
+      // dialog always lists every one, so nothing becomes unreachable when a
+      // chip is switched off.
       const view = prefs.view;
       const segments = [];
       if (view.typing) segments.push(t('typing') + ' ' + formatDuration(stats.typingMs, t));
@@ -1316,23 +1328,113 @@ window.__ModuleLoader__.load({
         segments.push(t('ttft') + ' ' + formatBrief(totals.ttftMs));
       }
 
-      // With every chip off the bar renders nothing at all: an empty pill would
-      // leave a clickable gap in the dock with no label to explain it.
-      if (segments.length === 0) return null;
+      // Everything the user switched on lives in this one block and takes
+      // turns: the typing figures first, then whatever ambient facts are
+      // available. The dock therefore gains a single entry no matter how many
+      // facts are enabled, and a fixed minimum width keeps it from jittering
+      // as a short slide replaces a long one.
+      const feed = prefs.feed;
+      const todos = useProjection('todos');
+      const jobs = useJobsRows(sessionKey);
 
-      const labelChildren = [];
-      for (let i = 0; i < segments.length; i += 1) {
-        if (i > 0) {
-          labelChildren.push(h('span', { key: 'sep' + i, className: 'doki-sep', 'aria-hidden': 'true' }, '·'));
+      const slides = [];
+      const ambient = { todos: null, jobs: null };
+      if (segments.length > 0) slides.push({ key: 'stats', kind: 'stats', title: t('hint') });
+      if (feed.ticker) {
+        const extras = buildFeedSources(todos, jobs, feed, t);
+        for (let i = 0; i < extras.length; i += 1) {
+          const extra = extras[i];
+          slides.push(extra);
+          // Kept for the dialog: a slide that only showed for four seconds is
+          // otherwise unreadable, and the figures are already computed here.
+          if (extra.key === 'todos') ambient.todos = extra.value;
+          else if (extra.key === 'jobs') ambient.jobs = extra.value;
         }
-        labelChildren.push(segments[i]);
       }
+      const slideCount = slides.length;
 
-      const label = h('span', { className: 'doki-label' }, labelChildren);
+      const [slideIndex, setSlideIndex] = useState(0);
+      // The track only moves while `rolling` is on: the beat arms the roll,
+      // and the roll's own timer commits the new slide and resets the track.
+      // Keeping the two apart means the DOM holds one row almost always — the
+      // incoming row exists only for the half second it takes to slide in.
+      const [rolling, setRolling] = useState(false);
+      useEffect(() => {
+        if (slideCount < 2) return undefined;
+        const handle = window.setInterval(() => setRolling(true), FEED_INTERVAL_MS);
+        return () => window.clearInterval(handle);
+      }, [slideCount]);
+      useEffect(() => {
+        if (!rolling) return undefined;
+        const handle = window.setTimeout(() => {
+          setRolling(false);
+          setSlideIndex((value) => value + 1);
+        }, FEED_ROLL_MS);
+        return () => window.clearTimeout(handle);
+      }, [rolling]);
+      // A source can vanish mid-roll; dropping the flag keeps the track from
+      // being left parked one row up with nothing below it.
+      useEffect(() => {
+        if (rolling && slideCount < 2) setRolling(false);
+      }, [rolling, slideCount]);
+
+      // With every chip off and nothing to report the bar renders nothing at
+      // all: an empty pill would leave a clickable gap with no label.
+      if (slideCount === 0) return null;
+
+      // Modulo keeps the slide valid when a source disappears mid-cycle, and
+      // the range check keeps a stale counter from indexing past the list.
+      const safeIndex = typeof slideIndex === 'number' && isFinite(slideIndex) && slideIndex >= 0
+        ? Math.floor(slideIndex)
+        : 0;
+      const current = slides[safeIndex % slideCount] || slides[0];
+      if (current === undefined) return null;
+      // While rolling, the row that is about to arrive is appended below the
+      // visible one so the track has something to reveal as it moves up.
+      const incoming = rolling && slideCount > 1
+        ? slides[(safeIndex + 1) % slideCount] || null
+        : null;
+
+      /** One slide as a row: its own icon plus its own text. */
+      const buildRow = (slide, key) => {
+        let text = null;
+        if (slide.kind === 'stats') {
+          const labelChildren = [];
+          for (let i = 0; i < segments.length; i += 1) {
+            if (i > 0) {
+              labelChildren.push(h('span', { key: 'sep' + i, className: 'doki-sep', 'aria-hidden': 'true' }, '·'));
+            }
+            labelChildren.push(segments[i]);
+          }
+          text = h('span', { className: 'doki-label' }, labelChildren);
+        } else {
+          text = h(
+            'span',
+            { className: 'doki-label' },
+            h('span', { className: 'doki-factKey' }, slide.label + ' '),
+            h('span', { className: 'doki-factValue' }, slide.value)
+          );
+        }
+        const rowIcon = slide.kind === 'jobs' ? h(SpinnerIcon, null) : slide.kind === 'todos' ? h(ListIcon, null) : h(ClockIcon, null);
+        return h('span', { key, className: 'doki-row' }, rowIcon, text);
+      };
+
+      const rows = [buildRow(current, 'row-current')];
+      if (incoming !== null) rows.push(buildRow(incoming, 'row-incoming'));
+
+      const label = h(
+        'span',
+        { className: 'doki-viewport' },
+        h(
+          'span',
+          { className: rolling ? 'doki-track doki-track--roll' : 'doki-track' },
+          rows
+        )
+      );
 
       const pill = h(
         'span',
-        { className: 'doki-anchor', 'data-composer-stat': 'doki', ref: rootRef },
+        { className: 'doki-anchor', 'data-composer-stat': 'doki', 'data-doki-slide': current.key, ref: rootRef },
         h(
           'button',
           {
@@ -1340,10 +1442,10 @@ window.__ModuleLoader__.load({
             className: 'doki-pill',
             'aria-haspopup': 'dialog',
             'aria-expanded': open ? 'true' : 'false',
-            'aria-label': t('hint'),
+            'aria-label': current.kind === 'stats' ? t('hint') : String(current.title),
+            title: current.kind === 'stats' ? t('hint') : String(current.title),
             onClick: () => setOpen((value) => !value),
           },
-          h(ClockIcon, null),
           label
         )
       );
@@ -1377,7 +1479,13 @@ window.__ModuleLoader__.load({
             h('dt', null, t('elapsed')),
             h('dd', null, totals.elapsedMs === null ? t('dash') : formatDuration(totals.elapsedMs, t)),
             h('dt', null, t('ttft')),
-            h('dd', null, totals.ttftMs === null ? t('dash') : formatBrief(totals.ttftMs))
+            h('dd', null, totals.ttftMs === null ? t('dash') : formatBrief(totals.ttftMs)),
+            // The rotating facts are listed here as well, so a slide the user
+            // only caught for a moment is still readable on demand.
+            ambient.todos === null ? null : h('dt', null, t('feedTodo')),
+            ambient.todos === null ? null : h('dd', null, ambient.todos),
+            ambient.jobs === null ? null : h('dt', null, t('feedJob')),
+            ambient.jobs === null ? null : h('dd', null, ambient.jobs)
           )
         );
         panel = ReactDOM !== null && typeof ReactDOM.createPortal === 'function' &&
@@ -1511,8 +1619,8 @@ window.__ModuleLoader__.load({
       return status !== 'completed' && status !== 'killed' && status !== 'failed';
     }
 
-    // Only sources with something to say are queued. An empty list means the
-    // cell renders nothing at all, so it never leaves a blank gap in the dock.
+    // Only facts with something to say join the rotation. An empty list means
+    // the slide is not offered at all, so the pill never shows a blank slide.
     function buildFeedSources(todos, jobs, feed, t) {
       const sources = [];
       if (feed.todos && Array.isArray(todos) && todos.length > 0) {
@@ -1523,10 +1631,10 @@ window.__ModuleLoader__.load({
         }
         sources.push({
           key: 'todos',
+          kind: 'todos',
           label: t('feedTodo'),
           value: String(done) + '/' + String(todos.length),
           title: t('feedTodosDesc'),
-          list: true,
         });
       }
       if (feed.jobs && Array.isArray(jobs) && jobs.length > 0) {
@@ -1537,75 +1645,14 @@ window.__ModuleLoader__.load({
         if (live > 0) {
           sources.push({
             key: 'jobs',
+            kind: 'jobs',
             label: t('feedJob'),
             value: String(live),
             title: t('feedJobsDesc'),
-            list: false,
           });
         }
       }
       return sources;
-    }
-
-    function DokiFeed(props) {
-      const t = typeof props.t === 'function'
-        ? props.t
-        : (key) => (DICT.zh[key] !== undefined ? DICT.zh[key] : key);
-
-      const [prefs, setLocalPrefs] = useState(getPrefs);
-      useEffect(() => subscribePrefs(setLocalPrefs), []);
-
-      // Same optional-projection guard as the stats pill: the fallback is a
-      // hook-shaped stand-in, so the hook order never changes.
-      const useProjection = typeof props.useProjection === 'function' ? props.useProjection : function useNoProjection() {
-        useState(0);
-        return undefined;
-      };
-      const todos = useProjection('todos');
-      const sessionKey = typeof props.sessionId === 'string' ? props.sessionId : '';
-      const jobs = useJobsRows(sessionKey);
-
-      const [index, setIndex] = useState(0);
-      const feed = prefs.feed;
-      const sources = buildFeedSources(todos, jobs, feed, t);
-
-      useEffect(() => {
-        if (!feed.ticker || sources.length < 2) return undefined;
-        const handle = window.setInterval(() => setIndex((value) => value + 1), FEED_INTERVAL_MS);
-        return () => window.clearInterval(handle);
-      }, [feed.ticker, sources.length]);
-
-      if (!feed.ticker || sources.length === 0) return null;
-
-      // Modulo keeps the slide valid when a source disappears mid-cycle, and
-      // the range check keeps a stale or corrupted counter from indexing past
-      // the list (the counter lives in hook state, which outlives any array).
-      const safe = typeof index === 'number' && isFinite(index) && index >= 0 ? Math.floor(index) : 0;
-      const current = sources[safe % sources.length] || sources[0];
-      if (current === undefined) return null;
-
-      return h(
-        'span',
-        { className: 'doki-feed' },
-        h(
-          'button',
-          {
-            type: 'button',
-            className: 'doki-feedPill',
-            'data-doki-feed': current.key,
-            title: current.title,
-            'aria-label': t('feedTicker') + ' ' + current.label + ' ' + current.value,
-            onClick: () => setIndex((value) => value + 1),
-          },
-          current.list ? h(ListIcon, null) : h(SpinnerIcon, null),
-          h(
-            'span',
-            { className: 'doki-feedText' },
-            h('span', { className: 'doki-feedKey' }, current.label + ' '),
-            h('span', { className: 'doki-feedValue' }, current.value)
-          )
-        )
-      );
     }
 
     /**
@@ -1851,30 +1898,14 @@ window.__ModuleLoader__.load({
         console.warn('[doki] slot registration skipped:', error);
       }
 
-      // The rotating cell reads the optional client `jobs` service. It is
-      // fetched with `ctx.get` (a plain lookup) rather than declared in
-      // `inject`: a declared service gates activation, and one that never
-      // settles would keep this entry pending and fail the whole boot.
+      // The pill reads the optional client `jobs` service. It is fetched with
+      // `ctx.get` (a plain lookup) rather than declared in `inject`: a declared
+      // service gates activation, and one that never settles would keep this
+      // entry pending and fail the whole boot.
       try {
         attachJobs(ctx);
       } catch (error) {
         console.warn('[doki] jobs lookup skipped:', error);
-      }
-
-      try {
-        ctx.slots.inject('conversation.composer.dock', () =>
-          ctx.slots.register(
-            {
-              name: 'conversation.composer.dock',
-              id: 'doki-feed',
-              order: 101,
-              locale: NS,
-            },
-            DokiFeed
-          )
-        );
-      } catch (error) {
-        console.warn('[doki] feed slot registration skipped:', error);
       }
 
       try {
